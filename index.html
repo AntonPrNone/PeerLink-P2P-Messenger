@@ -153,21 +153,24 @@
           <div class="flex items-center justify-between">
             <span class="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
               <span class="w-5 h-5 rounded-full bg-indigo-600/30 text-indigo-300 flex items-center justify-center text-[10px] border border-indigo-500/40">1</span>
-              Ваш ключ приглашения
+              Приглашение для собеседника
             </span>
             <button onclick="generateHostOffer()" id="genOfferBtn" class="text-xs px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition flex items-center gap-1">
               <i data-lucide="key" class="w-3 h-3"></i> Сгенерировать
             </button>
           </div>
-          <p class="text-xs text-slate-400">Нажмите «Сгенерировать» и отправьте этот код (или покажите QR) собеседнику.</p>
+          <p class="text-xs text-slate-400">Сгенерируйте и отправьте другу <strong>готовую ссылку</strong> (или код / QR):</p>
           <div class="relative">
-            <textarea id="hostOfferOutput" readonly placeholder="Здесь появится ваш сгенерированный код..." class="w-full h-20 bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-[11px] font-mono text-slate-300 focus:outline-none resize-none"></textarea>
+            <textarea id="hostOfferOutput" readonly placeholder="Здесь появится сгенерированная ссылка или код..." class="w-full h-20 bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-[11px] font-mono text-slate-300 focus:outline-none resize-none"></textarea>
           </div>
-          <div class="flex items-center gap-2">
-            <button onclick="copyHostOffer()" id="copyOfferBtn" disabled class="flex-1 py-1.5 rounded-lg bg-slate-700/60 disabled:opacity-50 hover:bg-slate-700 text-xs font-medium text-slate-200 transition flex items-center justify-center gap-1.5">
-              <i data-lucide="copy" class="w-3.5 h-3.5"></i> Скопировать код
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="copyHostOfferLink()" id="copyOfferLinkBtn" disabled class="flex-1 py-1.5 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-xs font-medium text-white transition flex items-center justify-center gap-1.5 shadow-sm">
+              <i data-lucide="link" class="w-3.5 h-3.5"></i> Скопировать ссылку
             </button>
-            <button onclick="showQrModal('offer')" id="qrOfferBtn" disabled class="px-3 py-1.5 rounded-lg bg-slate-700/60 disabled:opacity-50 hover:bg-slate-700 text-xs font-medium text-slate-200 transition flex items-center gap-1.5">
+            <button onclick="copyHostOffer()" id="copyOfferBtn" disabled class="py-1.5 px-3 rounded-lg bg-slate-700/60 disabled:opacity-40 hover:bg-slate-700 text-xs font-medium text-slate-200 transition flex items-center justify-center gap-1.5">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i> Код
+            </button>
+            <button onclick="showQrModal('offer')" id="qrOfferBtn" disabled class="px-3 py-1.5 rounded-lg bg-slate-700/60 disabled:opacity-40 hover:bg-slate-700 text-xs font-medium text-slate-200 transition flex items-center gap-1.5">
               <i data-lucide="qr-code" class="w-3.5 h-3.5"></i> QR
             </button>
           </div>
@@ -177,10 +180,10 @@
         <div class="bg-slate-800/40 rounded-xl p-4 border border-slate-700/60 space-y-3">
           <span class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
             <span class="w-5 h-5 rounded-full bg-emerald-600/30 text-emerald-300 flex items-center justify-center text-[10px] border border-emerald-500/40">2</span>
-            Вставьте ответ от гостя
+            Ответная ссылка или код от гостя
           </span>
-          <p class="text-xs text-slate-400">После того как гость применит ваш ключ, он пришлет ответный код:</p>
-          <textarea id="hostAnswerInput" placeholder="Вставьте сюда ответный код от гостя..." class="w-full h-20 bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-emerald-500/60 resize-none"></textarea>
+          <p class="text-xs text-slate-400">Вставьте сюда ответную ссылку или код, который прислал собеседник:</p>
+          <textarea id="hostAnswerInput" oninput="handleHostAnswerAutoInput()" placeholder="Вставьте ответную ссылку (https://...#answer=...) или код..." class="w-full h-20 bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-emerald-500/60 resize-none"></textarea>
           <button onclick="applyGuestAnswerOnHost()" id="connectHostBtn" class="w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/30">
             <i data-lucide="zap" class="w-3.5 h-3.5"></i> Установить P2P-соединение
           </button>
@@ -193,10 +196,10 @@
         <div class="bg-slate-800/40 rounded-xl p-4 border border-slate-700/60 space-y-3">
           <span class="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
             <span class="w-5 h-5 rounded-full bg-indigo-600/30 text-indigo-300 flex items-center justify-center text-[10px] border border-indigo-500/40">1</span>
-            Код от создателя
+            Ссылка или код приглашения
           </span>
-          <p class="text-xs text-slate-400">Вставьте код приглашения, который прислал вам хост:</p>
-          <textarea id="guestOfferInput" placeholder="Вставьте сюда код от создателя беседы..." class="w-full h-20 bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-indigo-500/60 resize-none"></textarea>
+          <p class="text-xs text-slate-400">Вставьте ссылку (https://...#offer=...) или код от хоста:</p>
+          <textarea id="guestOfferInput" oninput="handleGuestOfferAutoInput()" placeholder="Вставьте ссылку-приглашение или код сюда..." class="w-full h-20 bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-indigo-500/60 resize-none"></textarea>
           <button onclick="acceptOfferAsGuest()" id="guestGenAnswerBtn" class="w-full py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-md shadow-indigo-900/30">
             <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Принять и создать ответ
           </button>
@@ -206,15 +209,18 @@
         <div class="bg-slate-800/40 rounded-xl p-4 border border-slate-700/60 space-y-3">
           <span class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
             <span class="w-5 h-5 rounded-full bg-emerald-600/30 text-emerald-300 flex items-center justify-center text-[10px] border border-emerald-500/40">2</span>
-            Ваш ответный код для хоста
+            Ваш ответ для создателя
           </span>
-          <p class="text-xs text-slate-400">Скопируйте этот код и отправьте его создателю беседы:</p>
-          <textarea id="guestAnswerOutput" readonly placeholder="Здесь появится ответный код..." class="w-full h-20 bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-[11px] font-mono text-slate-300 focus:outline-none resize-none"></textarea>
-          <div class="flex items-center gap-2">
-            <button onclick="copyGuestAnswer()" id="copyGuestAnswerBtn" disabled class="flex-1 py-1.5 rounded-lg bg-slate-700/60 disabled:opacity-50 hover:bg-slate-700 text-xs font-medium text-slate-200 transition flex items-center justify-center gap-1.5">
-              <i data-lucide="copy" class="w-3.5 h-3.5"></i> Скопировать ответ
+          <p class="text-xs text-slate-400">Отправьте создателю готовую ответную ссылку (или код / QR):</p>
+          <textarea id="guestAnswerOutput" readonly placeholder="Здесь появится ответная ссылка или код..." class="w-full h-20 bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-[11px] font-mono text-slate-300 focus:outline-none resize-none"></textarea>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="copyGuestAnswerLink()" id="copyGuestAnswerLinkBtn" disabled class="flex-1 py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600 text-xs font-medium text-white transition flex items-center justify-center gap-1.5 shadow-sm">
+              <i data-lucide="link" class="w-3.5 h-3.5"></i> Скопировать ссылку
             </button>
-            <button onclick="showQrModal('answer')" id="qrGuestBtn" disabled class="px-3 py-1.5 rounded-lg bg-slate-700/60 disabled:opacity-50 hover:bg-slate-700 text-xs font-medium text-slate-200 transition flex items-center gap-1.5">
+            <button onclick="copyGuestAnswer()" id="copyGuestAnswerBtn" disabled class="py-1.5 px-3 rounded-lg bg-slate-700/60 disabled:opacity-40 hover:bg-slate-700 text-xs font-medium text-slate-200 transition flex items-center justify-center gap-1.5">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i> Код
+            </button>
+            <button onclick="showQrModal('answer')" id="qrGuestBtn" disabled class="px-3 py-1.5 rounded-lg bg-slate-700/60 disabled:opacity-40 hover:bg-slate-700 text-xs font-medium text-slate-200 transition flex items-center gap-1.5">
               <i data-lucide="qr-code" class="w-3.5 h-3.5"></i> QR
             </button>
           </div>
@@ -384,6 +390,8 @@
     // Токены текущей сессии
     let currentOfferToken = '';
     let currentAnswerToken = '';
+    let currentOfferLink = '';
+    let currentAnswerLink = '';
 
     // Буферы входящих чанков файлов
     const incomingFileTransfers = new Map();
@@ -525,9 +533,40 @@
       }
     }
 
+    function buildFullUrl(hashType, token) {
+      const cleanUrl = window.location.href.split('#')[0];
+      return `${cleanUrl}#${hashType}=${token}`;
+    }
+
+    function extractTokenFromText(text, expectedType) {
+      if (!text) return '';
+      let str = text.trim();
+
+      // Если вставлена полная ссылка с хешем вида #offer=PLK_... или #answer=PLK_...
+      if (str.includes('#')) {
+        const hashPart = str.split('#')[1] || '';
+        const params = new URLSearchParams(hashPart);
+        if (expectedType && params.has(expectedType)) {
+          return params.get(expectedType).trim();
+        }
+        if (params.has('offer')) return params.get('offer').trim();
+        if (params.has('answer')) return params.get('answer').trim();
+        
+        // Поиск вхождения PLK_ в хеше
+        const match = hashPart.match(/PLK_[A-Za-z0-9_\-+]+/);
+        if (match) return match[0];
+      }
+
+      // Если это чистый токен с префиксом или без
+      const directMatch = str.match(/PLK_[A-Za-z0-9_\-+]+/);
+      if (directMatch) return directMatch[0];
+
+      return str;
+    }
+
     function unpackSessionToken(token) {
       try {
-        let clean = token.trim();
+        let clean = extractTokenFromText(token);
         if (clean.startsWith('PLK_')) {
           clean = clean.substring(4);
         }
@@ -587,8 +626,10 @@
 
         const finalDesc = await waitForIceGatheringComplete(peerConnection);
         currentOfferToken = packSessionToken(finalDesc);
+        currentOfferLink = buildFullUrl('offer', currentOfferToken);
 
-        document.getElementById('hostOfferOutput').value = currentOfferToken;
+        document.getElementById('hostOfferOutput').value = currentOfferLink;
+        document.getElementById('copyOfferLinkBtn').disabled = false;
         document.getElementById('copyOfferBtn').disabled = false;
         document.getElementById('qrOfferBtn').disabled = false;
 
@@ -596,7 +637,7 @@
         btn.innerHTML = `<i data-lucide="check" class="w-3 h-3"></i> Готово`;
         lucide.createIcons();
 
-        showToast('Ключ приглашения сгенерирован!', 'success');
+        showToast('Ссылка-приглашение готова! Нажмите «Скопировать ссылку»', 'success');
       } catch (err) {
         console.error(err);
         showToast('Ошибка создания ключа: ' + err.message, 'error');
@@ -606,16 +647,30 @@
       }
     }
 
+    function copyHostOfferLink() {
+      if (!currentOfferLink) return;
+      copyToClipboard(currentOfferLink);
+      showToast('Прямая ссылка скопирована! Отправьте её собеседнику.', 'success');
+    }
+
     function copyHostOffer() {
       if (!currentOfferToken) return;
       copyToClipboard(currentOfferToken);
-      showToast('Код приглашения скопирован! Отправьте его собеседнику.', 'success');
+      showToast('Чистый код приглашения скопирован!', 'success');
+    }
+
+    function handleHostAnswerAutoInput() {
+      const val = document.getElementById('hostAnswerInput').value;
+      if (val && (val.includes('#answer=') || val.includes('PLK_'))) {
+        // Если пользователь вставил ссылку, автоматически подсвечиваем кнопку подключения
+        document.getElementById('connectHostBtn').classList.add('ring-2', 'ring-emerald-400');
+      }
     }
 
     async function applyGuestAnswerOnHost() {
-      const input = document.getElementById('hostAnswerInput').value.trim();
-      if (!input) {
-        showToast('Пожалуйста, вставьте ответный код от гостя', 'warning');
+      const rawInput = document.getElementById('hostAnswerInput').value.trim();
+      if (!rawInput) {
+        showToast('Пожалуйста, вставьте ответную ссылку или код от гостя', 'warning');
         return;
       }
       if (!peerConnection) {
@@ -624,23 +679,34 @@
       }
 
       try {
-        const answerDesc = unpackSessionToken(input);
+        const cleanToken = extractTokenFromText(rawInput, 'answer');
+        const answerDesc = unpackSessionToken(cleanToken);
         await peerConnection.setRemoteDescription(answerDesc);
         showToast('Ответ принят! Устанавливается прямое P2P соединение...', 'info');
       } catch (err) {
-        showToast('Ошибка применения ответа: проверьте правильность кода', 'error');
+        showToast('Ошибка применения ответа: проверьте правильность ссылки/кода', 'error');
       }
     }
 
     // ==========================================
     // Логика Гостя (Подключение к беседе)
     // ==========================================
-    async function acceptOfferAsGuest() {
-      const input = document.getElementById('guestOfferInput').value.trim();
-      if (!input) {
-        showToast('Пожалуйста, вставьте код приглашения от создателя', 'warning');
+    function handleGuestOfferAutoInput() {
+      const val = document.getElementById('guestOfferInput').value;
+      if (val && (val.includes('#offer=') || val.includes('PLK_'))) {
+        document.getElementById('guestGenAnswerBtn').classList.add('ring-2', 'ring-indigo-400');
+      }
+    }
+
+    async function acceptOfferAsGuest(optionalToken) {
+      const rawInput = optionalToken || document.getElementById('guestOfferInput').value.trim();
+      if (!rawInput) {
+        showToast('Пожалуйста, вставьте ссылку-приглашение или код от создателя', 'warning');
         return;
       }
+
+      const cleanToken = extractTokenFromText(rawInput, 'offer');
+      document.getElementById('guestOfferInput').value = cleanToken;
 
       const btn = document.getElementById('guestGenAnswerBtn');
       btn.disabled = true;
@@ -658,7 +724,7 @@
 
         setupPeerConnectionEvents(peerConnection);
 
-        const offerDesc = unpackSessionToken(input);
+        const offerDesc = unpackSessionToken(cleanToken);
         await peerConnection.setRemoteDescription(offerDesc);
 
         const answer = await peerConnection.createAnswer();
@@ -666,8 +732,10 @@
 
         const finalDesc = await waitForIceGatheringComplete(peerConnection);
         currentAnswerToken = packSessionToken(finalDesc);
+        currentAnswerLink = buildFullUrl('answer', currentAnswerToken);
 
-        document.getElementById('guestAnswerOutput').value = currentAnswerToken;
+        document.getElementById('guestAnswerOutput').value = currentAnswerLink;
+        document.getElementById('copyGuestAnswerLinkBtn').disabled = false;
         document.getElementById('copyGuestAnswerBtn').disabled = false;
         document.getElementById('qrGuestBtn').disabled = false;
 
@@ -675,20 +743,26 @@
         btn.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5"></i> Ответ готов`;
         lucide.createIcons();
 
-        showToast('Ответный код создан! Скопируйте и отправьте его создателю.', 'success');
+        showToast('Ответная ссылка создана! Отправьте её создателю.', 'success');
       } catch (err) {
         console.error(err);
-        showToast('Ошибка обработки кода создателя: ' + err.message, 'error');
+        showToast('Ошибка обработки приглашения: ' + err.message, 'error');
         btn.disabled = false;
         btn.innerHTML = `<i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Принять и создать ответ`;
         lucide.createIcons();
       }
     }
 
+    function copyGuestAnswerLink() {
+      if (!currentAnswerLink) return;
+      copyToClipboard(currentAnswerLink);
+      showToast('Ответная ссылка скопирована! Отправьте её создателю.', 'success');
+    }
+
     function copyGuestAnswer() {
       if (!currentAnswerToken) return;
       copyToClipboard(currentAnswerToken);
-      showToast('Ответный код скопирован! Отправьте его создателю для завершения.', 'success');
+      showToast('Ответный код скопирован!', 'success');
     }
 
     // ==========================================
@@ -1354,14 +1428,17 @@
     // QR-коды и буфер обмена
     // ==========================================
     function showQrModal(type) {
-      const textToEncode = type === 'offer' ? currentOfferToken : currentAnswerToken;
+      // Для QR предпочитаем ссылку, чтобы при сканировании камерой телефона она сразу открывалась в браузере
+      const textToEncode = type === 'offer' 
+        ? (currentOfferLink || currentOfferToken) 
+        : (currentAnswerLink || currentAnswerToken);
       if (!textToEncode) return;
 
       const modal = document.getElementById('qrModal');
       const title = document.getElementById('qrModalTitle');
       const container = document.getElementById('qrCanvasContainer');
 
-      title.innerText = type === 'offer' ? 'QR-код создателя (Хост)' : 'QR-код ответа (Гость)';
+      title.innerText = type === 'offer' ? 'QR-код ссылки хоста' : 'QR-код ответа гостя';
       container.innerHTML = '';
 
       new QRCode(container, {
@@ -1428,6 +1505,35 @@
     // ==========================================
     // Инициализация при старте
     // ==========================================
+    function checkUrlHashActions() {
+      const hash = window.location.hash;
+      if (!hash) return;
+
+      if (hash.includes('offer=')) {
+        // Пользователь перешел по ссылке-приглашению Хоста
+        switchRole('guest');
+        document.getElementById('connectionPanel').classList.remove('hidden');
+        const token = extractTokenFromText(hash, 'offer');
+        if (token) {
+          document.getElementById('guestOfferInput').value = token;
+          showToast('Обнаружена ссылка-приглашение! Создаем ответ...', 'info');
+          setTimeout(() => {
+            acceptOfferAsGuest(token);
+          }, 400);
+        }
+      } else if (hash.includes('answer=')) {
+        // Пользователь (хост) открыл ссылку с ответом
+        switchRole('host');
+        document.getElementById('connectionPanel').classList.remove('hidden');
+        const token = extractTokenFromText(hash, 'answer');
+        if (token) {
+          document.getElementById('hostAnswerInput').value = token;
+          showToast('Обнаружена ответная ссылка гостя! Нажмите «Установить P2P-соединение»', 'info');
+          document.getElementById('connectHostBtn').classList.add('ring-2', 'ring-emerald-400', 'animate-pulse');
+        }
+      }
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
       loadChatHistory();
@@ -1436,6 +1542,10 @@
       if (window.location.protocol === 'file:') {
         document.getElementById('fileProtocolNotice').classList.remove('hidden');
       }
+
+      // Проверяем входящие ссылки в адресной строке
+      checkUrlHashActions();
+      window.addEventListener('hashchange', checkUrlHashActions);
 
       // Разблокировка Tone.js по первому клику
       document.body.addEventListener('click', () => {
