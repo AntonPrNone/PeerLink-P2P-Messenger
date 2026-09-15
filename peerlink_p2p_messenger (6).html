@@ -1,0 +1,1449 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full bg-slate-950 text-slate-100 antialiased">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PeerLink — P2P Messenger</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- LZ-String для сжатия ключей WebRTC -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+  
+  <!-- Генератор QR-кодов -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  
+  <!-- Tone.js для процедурного звука без внешних файлов -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#312e81',
+            }
+          },
+          animation: {
+            'pulse-subtle': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Стилизация скроллбаров */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(79, 70, 229, 0.4);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(99, 102, 241, 0.7);
+    }
+  </style>
+</head>
+
+<body class="h-full flex flex-col overflow-hidden select-none">
+
+  <!-- Верхняя панель / Шапка -->
+  <header class="flex-none bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-3 z-20">
+    <div class="max-w-6xl mx-auto flex items-center justify-between gap-3">
+      
+      <!-- Логотип и статус соединения -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+          <i data-lucide="radio" class="w-5 h-5 text-white"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-bold text-base md:text-lg tracking-tight text-white flex items-center gap-1.5">
+              PeerLink <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-normal border border-indigo-500/30">P2P</span>
+            </h1>
+            <!-- Индикатор состояния -->
+            <span id="connBadge" class="flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30 transition-all duration-300">
+              <span id="connDot" class="w-2 h-2 rounded-full bg-rose-500"></span>
+              <span id="connStatusText">Отключено</span>
+            </span>
+          </div>
+          <p id="subConnInfo" class="text-xs text-slate-400">Прямое шифрованное соединение без серверов</p>
+        </div>
+      </div>
+
+      <!-- Кнопки управления и метрики -->
+      <div class="flex items-center gap-2">
+        <!-- Метрика RTT Ping -->
+        <div id="pingBadge" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/60 border border-slate-700/60 text-xs text-slate-300">
+          <i data-lucide="activity" class="w-3.5 h-3.5 text-emerald-400"></i>
+          <span>Ping: <strong id="pingValue" class="text-white font-mono">--</strong></span>
+        </div>
+
+        <!-- Кнопка 1-Click теста -->
+        <button onclick="runLocalLoopbackTest()" title="Проверить работу P2P прямо в этой вкладке" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white border border-indigo-500/40 text-xs font-medium transition shadow-sm">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-400"></i>
+          <span class="hidden sm:inline">1-Click Тест</span>
+        </button>
+
+        <!-- Кнопка справки -->
+        <button onclick="toggleHostingGuide(true)" title="Инструкция по раздаче" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+          <i data-lucide="help-circle" class="w-4 h-4"></i>
+        </button>
+
+        <!-- Кнопка переподключения / меню настроек -->
+        <button onclick="toggleConnectionPanel()" id="toggleConnBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition">
+          <i data-lucide="link-2" class="w-3.5 h-3.5 text-indigo-400"></i>
+          <span>Связь</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Панель настройки соединения (Скрывается / Открывается) -->
+  <section id="connectionPanel" class="flex-none bg-slate-900 border-b border-slate-800 px-4 py-4 transition-all duration-300">
+    <div class="max-w-4xl mx-auto space-y-4">
+      
+      <!-- Предупреждение для локального файла file:/// -->
+      <div id="fileProtocolNotice" class="hidden rounded-xl bg-amber-500/10 border border-amber-500/30 p-3.5 text-amber-200 text-xs flex items-start gap-3">
+        <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-400 flex-none mt-0.5"></i>
+        <div class="space-y-1">
+          <p class="font-semibold text-amber-100">Вы открыли файл напрямую с диска (протокол file://)</p>
+          <p class="text-slate-300 leading-relaxed">
+            В таком режиме обычные интернет-ссылки <strong class="text-amber-200">всегда выдадут ошибку 404</strong> на чужом компьютере (ведь у друга нет вашего диска C:). 
+            Для связи отправляйте другу сам файл <code class="bg-black/30 px-1 py-0.5 rounded text-amber-300">index.html</code> и передавайте <strong class="text-white">Код</strong> или <strong class="text-white">QR</strong>. Либо загрузите файл на бесплатный хостинг за 10 секунд.
+          </p>
+          <button onclick="toggleHostingGuide(true)" class="underline text-amber-300 hover:text-white font-medium inline-block mt-1">
+            Как разместить файл в сети бесплатно за 1 клик →
+          </button>
+        </div>
+      </div>
+
+      <!-- Вкладки роли: Хост или Гость -->
+      <div class="flex rounded-xl bg-slate-800/80 p-1 border border-slate-700 max-w-md mx-auto">
+        <button id="roleHostTab" onclick="switchRole('host')" class="flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition bg-indigo-600 text-white shadow">
+          1. Я создаю беседу (Хост)
+        </button>
+        <button id="roleGuestTab" onclick="switchRole('guest')" class="flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-slate-200">
+          2. Я подключаюсь (Гость)
+        </button>
+      </div>
+
+      <!-- Блок 1: Интерфейс ХОСТА -->
+      <div id="hostWizard" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Шаг 1 Хоста -->
+        <div class="bg-slate-800/40 rounded-xl p-4 border border-slate-700/60 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+              <span class="w-5 h-5 rounded-full bg-indigo-600/30 text-indigo-300 flex items-center justify-center text-[10px] border border-indigo-500/40">1</span>
+              Ваш ключ приглашения
+            </span>
+            <button onclick="generateHostOffer()" id="genOfferBtn" class="text-xs px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition flex items-center gap-1">
+              <i data-lucide="key" class="w-3 h-3"></i> Сгенерировать
+            </button>
+          </div>
+          <p class="text-xs text-slate-400">Нажмите «Сгенерировать» и отправьте этот код (или покажите QR) собеседнику.</p>
+          <div class="relative">
+            <textarea id="hostOfferOutput" readonly placeholder="Здесь появится ваш сгенерированный код..." class="w-full h-20 bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-[11px] font-mono text-slate-300 focus:outline-none resize-none"></textarea>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="copyHostOffer()" id="copyOfferBtn" disabled class="flex-1 py-1.5 rounded-lg bg-slate-700/60 disabled:opacity-50 hover:bg-slate-700 text-xs font-medium text-slate-200 transition flex items-center justify-center gap-1.5">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i> Скопировать код
+            </button>
+            <button onclick="showQrModal('offer')" id="qrOfferBtn" disabled class="px-3 py-1.5 rounded-lg bg-slate-700/60 disabled:opacity-50 hover:bg-slate-700 text-xs font-medium text-slate-200 transition flex items-center gap-1.5">
+              <i data-lucide="qr-code" class="w-3.5 h-3.5"></i> QR
+            </button>
+          </div>
+        </div>
+
+        <!-- Шаг 2 Хоста -->
+        <div class="bg-slate-800/40 rounded-xl p-4 border border-slate-700/60 space-y-3">
+          <span class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-full bg-emerald-600/30 text-emerald-300 flex items-center justify-center text-[10px] border border-emerald-500/40">2</span>
+            Вставьте ответ от гостя
+          </span>
+          <p class="text-xs text-slate-400">После того как гость применит ваш ключ, он пришлет ответный код:</p>
+          <textarea id="hostAnswerInput" placeholder="Вставьте сюда ответный код от гостя..." class="w-full h-20 bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-emerald-500/60 resize-none"></textarea>
+          <button onclick="applyGuestAnswerOnHost()" id="connectHostBtn" class="w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/30">
+            <i data-lucide="zap" class="w-3.5 h-3.5"></i> Установить P2P-соединение
+          </button>
+        </div>
+      </div>
+
+      <!-- Блок 2: Интерфейс ГОСТЯ -->
+      <div id="guestWizard" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Шаг 1 Гостя -->
+        <div class="bg-slate-800/40 rounded-xl p-4 border border-slate-700/60 space-y-3">
+          <span class="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-full bg-indigo-600/30 text-indigo-300 flex items-center justify-center text-[10px] border border-indigo-500/40">1</span>
+            Код от создателя
+          </span>
+          <p class="text-xs text-slate-400">Вставьте код приглашения, который прислал вам хост:</p>
+          <textarea id="guestOfferInput" placeholder="Вставьте сюда код от создателя беседы..." class="w-full h-20 bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-indigo-500/60 resize-none"></textarea>
+          <button onclick="acceptOfferAsGuest()" id="guestGenAnswerBtn" class="w-full py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-md shadow-indigo-900/30">
+            <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Принять и создать ответ
+          </button>
+        </div>
+
+        <!-- Шаг 2 Гостя -->
+        <div class="bg-slate-800/40 rounded-xl p-4 border border-slate-700/60 space-y-3">
+          <span class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-full bg-emerald-600/30 text-emerald-300 flex items-center justify-center text-[10px] border border-emerald-500/40">2</span>
+            Ваш ответный код для хоста
+          </span>
+          <p class="text-xs text-slate-400">Скопируйте этот код и отправьте его создателю беседы:</p>
+          <textarea id="guestAnswerOutput" readonly placeholder="Здесь появится ответный код..." class="w-full h-20 bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-[11px] font-mono text-slate-300 focus:outline-none resize-none"></textarea>
+          <div class="flex items-center gap-2">
+            <button onclick="copyGuestAnswer()" id="copyGuestAnswerBtn" disabled class="flex-1 py-1.5 rounded-lg bg-slate-700/60 disabled:opacity-50 hover:bg-slate-700 text-xs font-medium text-slate-200 transition flex items-center justify-center gap-1.5">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i> Скопировать ответ
+            </button>
+            <button onclick="showQrModal('answer')" id="qrGuestBtn" disabled class="px-3 py-1.5 rounded-lg bg-slate-700/60 disabled:opacity-50 hover:bg-slate-700 text-xs font-medium text-slate-200 transition flex items-center gap-1.5">
+              <i data-lucide="qr-code" class="w-3.5 h-3.5"></i> QR
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Основная область сообщений -->
+  <main id="chatFeed" class="flex-1 overflow-y-auto p-4 space-y-4 max-w-4xl w-full mx-auto">
+    <!-- Заглушка, когда сообщений нет -->
+    <div id="emptyState" class="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400 space-y-3">
+      <div class="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-indigo-400 shadow-inner">
+        <i data-lucide="shield-check" class="w-8 h-8"></i>
+      </div>
+      <div class="max-w-sm space-y-1">
+        <h3 class="font-semibold text-slate-200 text-base">Шифрованная P2P сессия</h3>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Все сообщения, файлы и аудио идут напрямую между браузерами через канал WebRTC. Никаких серверов, баз данных и логов.
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center justify-center gap-2 pt-2">
+        <button onclick="runLocalLoopbackTest()" class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1.5">
+          <i data-lucide="play" class="w-3 h-3"></i> Протестировать отправку сообщений
+        </button>
+      </div>
+    </div>
+    
+    <!-- Контейнер сообщений -->
+    <div id="messagesContainer" class="space-y-3"></div>
+  </main>
+
+  <!-- Индикатор набора текста и передачи файлов -->
+  <div class="flex-none max-w-4xl w-full mx-auto px-4">
+    <!-- Прогресс передачи файлов -->
+    <div id="fileTransferProgressBox" class="hidden mb-2 p-2.5 rounded-xl bg-slate-900 border border-indigo-500/30 shadow-lg text-xs space-y-1.5">
+      <div class="flex items-center justify-between text-slate-300">
+        <span class="flex items-center gap-1.5 font-medium">
+          <i data-lucide="upload-cloud" class="w-3.5 h-3.5 text-indigo-400 animate-bounce"></i>
+          <span id="fileTransferLabel">Передача файла...</span>
+        </span>
+        <span id="fileTransferPercent" class="font-mono text-indigo-400 font-bold">0%</span>
+      </div>
+      <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+        <div id="fileTransferProgressBar" class="bg-indigo-500 h-full w-0 transition-all duration-150"></div>
+      </div>
+    </div>
+
+    <!-- Индикатор "Собеседник печатает" -->
+    <div id="typingIndicator" class="hidden text-xs text-indigo-400 flex items-center gap-1.5 py-1">
+      <span class="flex gap-0.5 items-center">
+        <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></span>
+      </span>
+      <span>Собеседник набирает сообщение...</span>
+    </div>
+  </div>
+
+  <!-- Нижняя панель ввода -->
+  <footer class="flex-none bg-slate-900/90 backdrop-blur-md border-t border-slate-800 p-3 z-10">
+    <div class="max-w-4xl mx-auto flex items-end gap-2">
+      
+      <!-- Скрытый инпут для выбора файлов -->
+      <input type="file" id="fileInput" class="hidden" multiple onchange="handleFileSelection(event)" />
+      
+      <!-- Кнопка прикрепления файла -->
+      <button onclick="document.getElementById('fileInput').click()" title="Прикрепить файл любого типа" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition flex-none border border-slate-700/60">
+        <i data-lucide="paperclip" class="w-5 h-5"></i>
+      </button>
+
+      <!-- Кнопка записи голосового сообщения -->
+      <button id="voiceBtn" onclick="toggleVoiceRecording()" title="Записать голосовое сообщение" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-rose-400 transition flex-none border border-slate-700/60">
+        <i data-lucide="mic" id="voiceBtnIcon" class="w-5 h-5"></i>
+      </button>
+
+      <!-- Текстовое поле -->
+      <div class="flex-1 bg-slate-950 border border-slate-800 focus-within:border-indigo-500/70 rounded-2xl p-1.5 flex items-center transition shadow-inner">
+        <textarea id="messageInput" rows="1" placeholder="Напишите сообщение... (Enter для отправки)" onkeydown="handleInputKeyDown(event)" oninput="handleTypingNotification()" class="w-full bg-transparent text-sm text-slate-100 placeholder-slate-500 px-3 py-1.5 focus:outline-none resize-none max-h-32 overflow-y-auto"></textarea>
+      </div>
+
+      <!-- Кнопка отправки -->
+      <button onclick="sendTextMessage()" id="sendBtn" class="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white transition flex-none shadow-lg shadow-indigo-600/30">
+        <i data-lucide="send" class="w-5 h-5"></i>
+      </button>
+    </div>
+  </footer>
+
+  <!-- Модальное окно с QR-кодом -->
+  <div id="qrModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full space-y-4 text-center shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 id="qrModalTitle" class="font-bold text-base text-white">QR-код ключа</h3>
+        <button onclick="closeQrModal()" class="p-1 rounded-lg text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      
+      <!-- Контейнер для QR с белой подложкой для идеальной читаемости камерой -->
+      <div class="p-4 bg-white rounded-2xl inline-block mx-auto shadow-md">
+        <div id="qrCanvasContainer" class="flex items-center justify-center min-w-[210px] min-h-[210px]"></div>
+      </div>
+      
+      <p class="text-xs text-slate-400">Наведите камеру смартфона или QR-сканер, чтобы быстро считать ключ без копирования текста.</p>
+      
+      <button onclick="closeQrModal()" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition">
+        Закрыть
+      </button>
+    </div>
+  </div>
+
+  <!-- Модальное окно: Памятка по хостингу -->
+  <div id="hostingGuideModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-base text-white flex items-center gap-2">
+          <i data-lucide="globe" class="w-5 h-5 text-indigo-400"></i> Как сделать ссылки рабочими
+        </h3>
+        <button onclick="toggleHostingGuide(false)" class="p-1 rounded-lg text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      
+      <div class="text-xs text-slate-300 space-y-3 leading-relaxed">
+        <div class="p-3 rounded-xl bg-slate-800/80 border border-slate-700">
+          <h4 class="font-semibold text-indigo-300 mb-1">Почему возникает ошибка 404?</h4>
+          <p>Когда вы открываете файл с диска (<code class="text-amber-300 font-mono">file:///C:/Users/...</code>), на другом компьютере или телефоне этого диска не существует. Ссылки работают только тогда, когда HTML размещен на веб-адресе (<code class="text-emerald-300 font-mono">https://...</code>).</p>
+        </div>
+
+        <div class="space-y-2">
+          <h4 class="font-semibold text-white">3 бесплатных способа получить веб-ссылку за 1 минуту:</h4>
+          <ol class="list-decimal list-inside space-y-2 text-slate-400">
+            <li>
+              <strong class="text-slate-200">Netlify Drop:</strong> перейдите на <a href="https://app.netlify.com/drop" target="_blank" class="text-indigo-400 underline">app.netlify.com/drop</a> и просто перетащите туда этот файл <code class="text-slate-200">index.html</code> мышкой. Вы сразу получите постоянный HTTPS-адрес.
+            </li>
+            <li>
+              <strong class="text-slate-200">GitHub Pages / Cloudflare Pages:</strong> загрузите файл в бесплатный репозиторий — сайт заработает автоматически.
+            </li>
+            <li>
+              <strong class="text-slate-200">Без хостинга вообще:</strong> просто отправьте файл <code class="text-slate-200">index.html</code> собеседнику через Telegram/диск. Вы оба открываете его и соединяетесь через кнопки <strong class="text-slate-200">«Скопировать код»</strong> или <strong class="text-slate-200">QR</strong>.
+            </li>
+          </ol>
+        </div>
+      </div>
+
+      <button onclick="toggleHostingGuide(false)" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition">
+        Понятно, спасибо!
+      </button>
+    </div>
+  </div>
+
+  <!-- Всплывающий контейнер тостов / уведомлений -->
+  <div id="toastBox" class="fixed bottom-20 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <script>
+    // ==========================================
+    // Глобальное состояние приложения
+    // ==========================================
+    let peerConnection = null;
+    let dataChannel = null;
+    let isConnected = false;
+    let isLoopbackTest = false;
+
+    // Вспомогательный виртуальный пир для мгновенного Loopback-теста
+    let loopbackRemotePc = null;
+    let loopbackRemoteDc = null;
+
+    // Токены текущей сессии
+    let currentOfferToken = '';
+    let currentAnswerToken = '';
+
+    // Буферы входящих чанков файлов
+    const incomingFileTransfers = new Map();
+
+    // Запись голосовых сообщений
+    let mediaRecorder = null;
+    let voiceAudioChunks = [];
+    let isRecordingVoice = false;
+
+    // Метрики сети
+    let pingIntervalId = null;
+    let lastPingTimestamp = 0;
+
+    // Конфигурация публичных STUN-серверов WebRTC
+    const RTC_CONFIG = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
+    };
+
+    // Звуковые эффекты через Tone.js (без внешних аудиофайлов)
+    let synthNotification = null;
+
+    function initAudioSynth() {
+      try {
+        if (!synthNotification && window.Tone) {
+          synthNotification = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: 'triangle' },
+            envelope: { attack: 0.005, decay: 0.1, sustain: 0.0, release: 0.1 }
+          }).toDestination();
+          synthNotification.volume.value = -12;
+        }
+      } catch (e) {
+        console.warn('Tone synth init warning:', e);
+      }
+    }
+
+    function playSound(type) {
+      try {
+        if (Tone.context.state !== 'running') {
+          Tone.context.resume();
+        }
+        initAudioSynth();
+        if (!synthNotification) return;
+
+        if (type === 'sent') {
+          synthNotification.triggerAttackRelease(['C5', 'E5'], '16n');
+        } else if (type === 'received') {
+          synthNotification.triggerAttackRelease(['G5', 'C6'], '16n');
+        } else if (type === 'connected') {
+          synthNotification.triggerAttackRelease(['C5', 'E5', 'G5', 'C6'], '12n');
+        }
+      } catch (err) {
+        // Фоновые политики воспроизведения
+      }
+    }
+
+    // Кастомные тосты вместо системных alert()
+    function showToast(message, type = 'info') {
+      const box = document.getElementById('toastBox');
+      const toast = document.createElement('div');
+      
+      const colors = {
+        info: 'bg-slate-800 text-slate-100 border-slate-700',
+        success: 'bg-emerald-950 text-emerald-100 border-emerald-700/60',
+        error: 'bg-rose-950 text-rose-100 border-rose-700/60',
+        warning: 'bg-amber-950 text-amber-100 border-amber-700/60'
+      };
+
+      toast.className = `pointer-events-auto px-3.5 py-2.5 rounded-xl border text-xs font-medium shadow-xl flex items-center gap-2 transform transition-all duration-300 translate-y-2 opacity-0 ${colors[type] || colors.info}`;
+      toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
+      
+      box.appendChild(toast);
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function toggleConnectionPanel() {
+      const panel = document.getElementById('connectionPanel');
+      panel.classList.toggle('hidden');
+    }
+
+    function toggleHostingGuide(show) {
+      const modal = document.getElementById('hostingGuideModal');
+      if (show) {
+        modal.classList.remove('hidden');
+      } else {
+        modal.classList.add('hidden');
+      }
+    }
+
+    function switchRole(role) {
+      const hostTab = document.getElementById('roleHostTab');
+      const guestTab = document.getElementById('roleGuestTab');
+      const hostWizard = document.getElementById('hostWizard');
+      const guestWizard = document.getElementById('guestWizard');
+
+      if (role === 'host') {
+        hostTab.className = 'flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition bg-indigo-600 text-white shadow';
+        guestTab.className = 'flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-slate-200';
+        hostWizard.classList.remove('hidden');
+        guestWizard.classList.add('hidden');
+      } else {
+        guestTab.className = 'flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition bg-indigo-600 text-white shadow';
+        hostTab.className = 'flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-slate-200';
+        guestWizard.classList.remove('hidden');
+        hostWizard.classList.add('hidden');
+      }
+    }
+
+    // Сжатие и распаковка WebRTC сессионных параметров через LZString
+    function packSessionToken(desc) {
+      try {
+        const compactObj = { t: desc.type, s: desc.sdp };
+        const jsonStr = JSON.stringify(compactObj);
+        const compressed = LZString.compressToEncodedURIComponent(jsonStr);
+        return 'PLK_' + compressed;
+      } catch (e) {
+        console.error('Ошибка упаковки токена:', e);
+        return '';
+      }
+    }
+
+    function unpackSessionToken(token) {
+      try {
+        let clean = token.trim();
+        if (clean.startsWith('PLK_')) {
+          clean = clean.substring(4);
+        }
+        const jsonStr = LZString.decompressFromEncodedURIComponent(clean);
+        if (!jsonStr) throw new Error('Некорректный сжатый токен');
+        const obj = JSON.parse(jsonStr);
+        return new RTCSessionDescription({ type: obj.t, sdp: obj.s });
+      } catch (e) {
+        console.error('Ошибка распаковки токена:', e);
+        throw new Error('Неверный формат ключа');
+      }
+    }
+
+    // Ожидание завершения сбора кандидатов ICE
+    function waitForIceGatheringComplete(pc) {
+      return new Promise((resolve) => {
+        if (pc.iceGatheringState === 'complete') {
+          resolve(pc.localDescription);
+          return;
+        }
+        const checkState = () => {
+          if (pc.iceGatheringState === 'complete') {
+            pc.removeEventListener('icegatheringstatechange', checkState);
+            resolve(pc.localDescription);
+          }
+        };
+        pc.addEventListener('icegatheringstatechange', checkState);
+        // Страховочный таймаут на случай медленных сетей
+        setTimeout(() => {
+          pc.removeEventListener('icegatheringstatechange', checkState);
+          resolve(pc.localDescription);
+        }, 1800);
+      });
+    }
+
+    // ==========================================
+    // Логика Хоста (Создание беседы)
+    // ==========================================
+    async function generateHostOffer() {
+      const btn = document.getElementById('genOfferBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> Сборка...`;
+      lucide.createIcons();
+
+      try {
+        cleanupPeerConnection();
+        peerConnection = new RTCPeerConnection(RTC_CONFIG);
+
+        // Создаем DataChannel
+        dataChannel = peerConnection.createDataChannel('peerlink_channel', { ordered: true });
+        setupDataChannel(dataChannel);
+
+        setupPeerConnectionEvents(peerConnection);
+
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+
+        const finalDesc = await waitForIceGatheringComplete(peerConnection);
+        currentOfferToken = packSessionToken(finalDesc);
+
+        document.getElementById('hostOfferOutput').value = currentOfferToken;
+        document.getElementById('copyOfferBtn').disabled = false;
+        document.getElementById('qrOfferBtn').disabled = false;
+
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="check" class="w-3 h-3"></i> Готово`;
+        lucide.createIcons();
+
+        showToast('Ключ приглашения сгенерирован!', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Ошибка создания ключа: ' + err.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="key" class="w-3 h-3"></i> Сгенерировать`;
+        lucide.createIcons();
+      }
+    }
+
+    function copyHostOffer() {
+      if (!currentOfferToken) return;
+      copyToClipboard(currentOfferToken);
+      showToast('Код приглашения скопирован! Отправьте его собеседнику.', 'success');
+    }
+
+    async function applyGuestAnswerOnHost() {
+      const input = document.getElementById('hostAnswerInput').value.trim();
+      if (!input) {
+        showToast('Пожалуйста, вставьте ответный код от гостя', 'warning');
+        return;
+      }
+      if (!peerConnection) {
+        showToast('Сначала сгенерируйте шаг 1', 'error');
+        return;
+      }
+
+      try {
+        const answerDesc = unpackSessionToken(input);
+        await peerConnection.setRemoteDescription(answerDesc);
+        showToast('Ответ принят! Устанавливается прямое P2P соединение...', 'info');
+      } catch (err) {
+        showToast('Ошибка применения ответа: проверьте правильность кода', 'error');
+      }
+    }
+
+    // ==========================================
+    // Логика Гостя (Подключение к беседе)
+    // ==========================================
+    async function acceptOfferAsGuest() {
+      const input = document.getElementById('guestOfferInput').value.trim();
+      if (!input) {
+        showToast('Пожалуйста, вставьте код приглашения от создателя', 'warning');
+        return;
+      }
+
+      const btn = document.getElementById('guestGenAnswerBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Подготовка...`;
+      lucide.createIcons();
+
+      try {
+        cleanupPeerConnection();
+        peerConnection = new RTCPeerConnection(RTC_CONFIG);
+
+        peerConnection.ondatachannel = (event) => {
+          dataChannel = event.channel;
+          setupDataChannel(dataChannel);
+        };
+
+        setupPeerConnectionEvents(peerConnection);
+
+        const offerDesc = unpackSessionToken(input);
+        await peerConnection.setRemoteDescription(offerDesc);
+
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        const finalDesc = await waitForIceGatheringComplete(peerConnection);
+        currentAnswerToken = packSessionToken(finalDesc);
+
+        document.getElementById('guestAnswerOutput').value = currentAnswerToken;
+        document.getElementById('copyGuestAnswerBtn').disabled = false;
+        document.getElementById('qrGuestBtn').disabled = false;
+
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5"></i> Ответ готов`;
+        lucide.createIcons();
+
+        showToast('Ответный код создан! Скопируйте и отправьте его создателю.', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Ошибка обработки кода создателя: ' + err.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Принять и создать ответ`;
+        lucide.createIcons();
+      }
+    }
+
+    function copyGuestAnswer() {
+      if (!currentAnswerToken) return;
+      copyToClipboard(currentAnswerToken);
+      showToast('Ответный код скопирован! Отправьте его создателю для завершения.', 'success');
+    }
+
+    // ==========================================
+    // Обработчики DataChannel и ConnectionState
+    // ==========================================
+    function setupPeerConnectionEvents(pc) {
+      pc.onconnectionstatechange = () => {
+        handleConnectionStatusChange(pc.connectionState);
+      };
+      pc.oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+          handleConnectionStatusChange('disconnected');
+        }
+      };
+    }
+
+    function setupDataChannel(dc) {
+      dc.binaryType = 'arraybuffer';
+
+      dc.onopen = () => {
+        handleConnectionStatusChange('connected');
+        startPingMonitor();
+        playSound('connected');
+      };
+
+      dc.onclose = () => {
+        handleConnectionStatusChange('disconnected');
+        stopPingMonitor();
+      };
+
+      dc.onerror = (err) => {
+        console.warn('DataChannel error:', err);
+      };
+
+      dc.onmessage = (event) => {
+        handleIncomingDataMessage(event.data);
+      };
+    }
+
+    function handleConnectionStatusChange(state) {
+      const badge = document.getElementById('connBadge');
+      const dot = document.getElementById('connDot');
+      const text = document.getElementById('connStatusText');
+      const subInfo = document.getElementById('subConnInfo');
+
+      if (state === 'connected') {
+        isConnected = true;
+        badge.className = 'flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+        text.innerText = 'P2P Онлайн';
+        subInfo.innerText = isLoopbackTest ? 'Тестовый режим (Loopback в одной вкладке)' : 'Прямой зашифрованный канал WebRTC активен';
+        
+        // Автоматически сворачиваем панель соединения для удобства
+        document.getElementById('connectionPanel').classList.add('hidden');
+        showToast('P2P-канал успешно открыт!', 'success');
+      } else if (state === 'connecting') {
+        isConnected = false;
+        badge.className = 'flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30';
+        dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
+        text.innerText = 'Связывание...';
+      } else {
+        isConnected = false;
+        badge.className = 'flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30';
+        dot.className = 'w-2 h-2 rounded-full bg-rose-500';
+        text.innerText = 'Отключено';
+        subInfo.innerText = 'Прямое шифрованное соединение без серверов';
+        stopPingMonitor();
+      }
+    }
+
+    function startPingMonitor() {
+      stopPingMonitor();
+      document.getElementById('pingBadge').classList.remove('hidden');
+      pingIntervalId = setInterval(() => {
+        if (dataChannel && dataChannel.readyState === 'open') {
+          lastPingTimestamp = performance.now();
+          dataChannel.send(JSON.stringify({ type: 'ping', t: lastPingTimestamp }));
+        }
+      }, 3000);
+    }
+
+    function stopPingMonitor() {
+      if (pingIntervalId) clearInterval(pingIntervalId);
+      pingIntervalId = null;
+      document.getElementById('pingBadge').classList.add('hidden');
+      document.getElementById('pingValue').innerText = '--';
+    }
+
+    // ==========================================
+    // Мгновенный 1-Click Loopback тест в памяти
+    // ==========================================
+    async function runLocalLoopbackTest() {
+      showToast('Запуск внутреннего P2P-теста...', 'info');
+      isLoopbackTest = true;
+
+      try {
+        cleanupPeerConnection();
+
+        // Создаем два локальных пира прямо в памяти этой же страницы
+        peerConnection = new RTCPeerConnection();
+        loopbackRemotePc = new RTCPeerConnection();
+
+        // Связываем ICE кандидаты
+        peerConnection.onicecandidate = (e) => {
+          if (e.candidate) loopbackRemotePc.addIceCandidate(e.candidate);
+        };
+        loopbackRemotePc.onicecandidate = (e) => {
+          if (e.candidate) peerConnection.addIceCandidate(e.candidate);
+        };
+
+        // Обработка удаленного DataChannel
+        loopbackRemotePc.ondatachannel = (e) => {
+          loopbackRemoteDc = e.channel;
+          loopbackRemoteDc.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'ping') {
+              loopbackRemoteDc.send(JSON.stringify({ type: 'pong', t: data.t }));
+            } else if (data.type === 'text') {
+              // Авто-эхо бот для проверки
+              setTimeout(() => {
+                if (loopbackRemoteDc.readyState === 'open') {
+                  loopbackRemoteDc.send(JSON.stringify({
+                    type: 'text',
+                    id: crypto.randomUUID(),
+                    text: '🤖 Эхо-тест: «' + data.text + '». WebRTC DataChannel работает идеально!',
+                    timestamp: Date.now()
+                  }));
+                }
+              }, 400);
+            }
+          };
+        };
+
+        dataChannel = peerConnection.createDataChannel('test_channel');
+        setupDataChannel(dataChannel);
+        setupPeerConnectionEvents(peerConnection);
+
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        await loopbackRemotePc.setRemoteDescription(offer);
+
+        const answer = await loopbackRemotePc.createAnswer();
+        await loopbackRemotePc.setLocalDescription(answer);
+        await peerConnection.setRemoteDescription(answer);
+
+        appendMessageToUi({
+          sender: 'system',
+          text: '✅ Виртуальный P2P-канал поднят прямо в оперативной памяти браузера. Вы можете отправлять сообщения, голосовые заметки и файлы для проверки!',
+          timestamp: Date.now()
+        });
+      } catch (err) {
+        console.error('Loopback error:', err);
+        showToast('Сбой внутреннего теста: ' + err.message, 'error');
+      }
+    }
+
+    function cleanupPeerConnection() {
+      if (dataChannel) {
+        try { dataChannel.close(); } catch(e){}
+        dataChannel = null;
+      }
+      if (peerConnection) {
+        try { peerConnection.close(); } catch(e){}
+        peerConnection = null;
+      }
+      if (loopbackRemotePc) {
+        try { loopbackRemotePc.close(); } catch(e){}
+        loopbackRemotePc = null;
+      }
+      stopPingMonitor();
+      handleConnectionStatusChange('disconnected');
+    }
+
+    // ==========================================
+    // Обработка сообщений чата
+    // ==========================================
+    function handleIncomingDataMessage(raw) {
+      if (typeof raw !== 'string') return;
+      try {
+        const msg = JSON.parse(raw);
+        
+        if (msg.type === 'ping') {
+          if (dataChannel && dataChannel.readyState === 'open') {
+            dataChannel.send(JSON.stringify({ type: 'pong', t: msg.t }));
+          }
+          return;
+        }
+
+        if (msg.type === 'pong') {
+          const rtt = Math.round(performance.now() - msg.t);
+          document.getElementById('pingValue').innerText = `${rtt} ms`;
+          return;
+        }
+
+        if (msg.type === 'typing') {
+          showRemoteTyping();
+          return;
+        }
+
+        if (msg.type === 'text') {
+          appendMessageToUi({
+            sender: 'remote',
+            text: msg.text,
+            timestamp: msg.timestamp || Date.now()
+          });
+          playSound('received');
+          return;
+        }
+
+        if (msg.type === 'voice') {
+          appendVoiceMessageToUi({
+            sender: 'remote',
+            audioDataUrl: msg.audioDataUrl,
+            timestamp: msg.timestamp || Date.now()
+          });
+          playSound('received');
+          return;
+        }
+
+        if (msg.type === 'file_meta') {
+          handleIncomingFileMeta(msg);
+          return;
+        }
+
+        if (msg.type === 'file_chunk') {
+          handleIncomingFileChunk(msg);
+          return;
+        }
+
+      } catch (err) {
+        console.warn('Malformed incoming packet:', err);
+      }
+    }
+
+    function sendTextMessage() {
+      const input = document.getElementById('messageInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      if (!isConnected || !dataChannel || dataChannel.readyState !== 'open') {
+        showToast('Нет активного P2P подключения! Нажмите кнопку «1-Click Тест» или настройте связь.', 'warning');
+        return;
+      }
+
+      const msgObj = {
+        type: 'text',
+        id: crypto.randomUUID(),
+        text: text,
+        timestamp: Date.now()
+      };
+
+      try {
+        dataChannel.send(JSON.stringify(msgObj));
+        appendMessageToUi({
+          sender: 'me',
+          text: text,
+          timestamp: msgObj.timestamp
+        });
+        input.value = '';
+        input.style.height = 'auto';
+        playSound('sent');
+      } catch (err) {
+        showToast('Ошибка отправки: ' + err.message, 'error');
+      }
+    }
+
+    function handleInputKeyDown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendTextMessage();
+      }
+    }
+
+    let lastTypingSent = 0;
+    function handleTypingNotification() {
+      const now = Date.now();
+      if (now - lastTypingSent > 2000 && isConnected && dataChannel && dataChannel.readyState === 'open') {
+        lastTypingSent = now;
+        dataChannel.send(JSON.stringify({ type: 'typing' }));
+      }
+    }
+
+    let typingTimeoutId = null;
+    function showRemoteTyping() {
+      const el = document.getElementById('typingIndicator');
+      el.classList.remove('hidden');
+      if (typingTimeoutId) clearTimeout(typingTimeoutId);
+      typingTimeoutId = setTimeout(() => {
+        el.classList.add('hidden');
+      }, 2500);
+    }
+
+    function appendMessageToUi({ sender, text, timestamp }) {
+      document.getElementById('emptyState').classList.add('hidden');
+      const container = document.getElementById('messagesContainer');
+      const timeStr = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      const msgWrapper = document.createElement('div');
+      
+      if (sender === 'system') {
+        msgWrapper.className = 'flex justify-center my-2';
+        msgWrapper.innerHTML = `
+          <div class="bg-indigo-950/60 border border-indigo-500/30 rounded-xl px-3 py-1.5 max-w-md text-center text-xs text-indigo-200">
+            ${escapeHtml(text)}
+          </div>
+        `;
+      } else if (sender === 'me') {
+        msgWrapper.className = 'flex justify-end';
+        msgWrapper.innerHTML = `
+          <div class="max-w-[85%] sm:max-w-md rounded-2xl rounded-br-sm bg-gradient-to-r from-indigo-600 to-indigo-700 text-white p-3 shadow-md space-y-1">
+            <p class="text-sm whitespace-pre-wrap break-words leading-relaxed">${escapeHtml(text)}</p>
+            <div class="flex items-center justify-end gap-1 text-[10px] text-indigo-200/80">
+              <span>${timeStr}</span>
+              <i data-lucide="check" class="w-3 h-3"></i>
+            </div>
+          </div>
+        `;
+      } else {
+        msgWrapper.className = 'flex justify-start';
+        msgWrapper.innerHTML = `
+          <div class="max-w-[85%] sm:max-w-md rounded-2xl rounded-bl-sm bg-slate-800 border border-slate-700/80 text-slate-100 p-3 shadow-md space-y-1">
+            <p class="text-sm whitespace-pre-wrap break-words leading-relaxed">${escapeHtml(text)}</p>
+            <div class="flex items-center justify-start gap-1 text-[10px] text-slate-400">
+              <span>${timeStr}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      container.appendChild(msgWrapper);
+      lucide.createIcons();
+      scrollChatToBottom();
+      saveChatHistory();
+    }
+
+    function scrollChatToBottom() {
+      const feed = document.getElementById('chatFeed');
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    // ==========================================
+    // Потоковая передача файлов чанками (16 KB)
+    // ==========================================
+    const CHUNK_SIZE = 16384; // 16 KB безопасный размер SCTP WebRTC
+
+    async function handleFileSelection(e) {
+      const files = e.target.files;
+      if (!files || !files.length) return;
+
+      if (!isConnected || !dataChannel || dataChannel.readyState !== 'open') {
+        showToast('Нет активного P2P соединения для передачи файлов!', 'warning');
+        return;
+      }
+
+      for (let i = 0; i < files.length; i++) {
+        await streamFileOverDataChannel(files[i]);
+      }
+      e.target.value = '';
+    }
+
+    async function streamFileOverDataChannel(file) {
+      const transferId = crypto.randomUUID();
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+      // Отправляем метаданные
+      dataChannel.send(JSON.stringify({
+        type: 'file_meta',
+        transferId: transferId,
+        name: file.name,
+        size: file.size,
+        mime: file.type || 'application/octet-stream',
+        totalChunks: totalChunks
+      }));
+
+      // Показываем прогресс-бар у отправителя
+      showFileProgressBar(`Отправка: ${file.name}`);
+
+      for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
+        const start = chunkIdx * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const slice = file.slice(start, end);
+        const base64Data = await readBlobAsBase64(slice);
+
+        // Контроль заполнения буфера WebRTC
+        while (dataChannel.bufferedAmount > 65536) {
+          await new Promise((resolve) => setTimeout(resolve, 15));
+        }
+
+        dataChannel.send(JSON.stringify({
+          type: 'file_chunk',
+          transferId: transferId,
+          chunkIdx: chunkIdx,
+          data: base64Data
+        }));
+
+        updateFileProgressBar(Math.round(((chunkIdx + 1) / totalChunks) * 100));
+      }
+
+      hideFileProgressBar();
+
+      // Отображаем файл у себя в чате
+      const fileUrl = URL.createObjectURL(file);
+      appendFileAttachmentToUi({
+        sender: 'me',
+        name: file.name,
+        size: file.size,
+        mime: file.type,
+        url: fileUrl,
+        timestamp: Date.now()
+      });
+      playSound('sent');
+    }
+
+    function readBlobAsBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const res = reader.result;
+          const base64 = res.split(',')[1] || '';
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function handleIncomingFileMeta(meta) {
+      incomingFileTransfers.set(meta.transferId, {
+        meta: meta,
+        receivedChunks: new Array(meta.totalChunks),
+        receivedCount: 0
+      });
+      showFileProgressBar(`Получение: ${meta.name}`);
+    }
+
+    function handleIncomingFileChunk(chunkPacket) {
+      const transfer = incomingFileTransfers.get(chunkPacket.transferId);
+      if (!transfer) return;
+
+      transfer.receivedChunks[chunkPacket.chunkIdx] = chunkPacket.data;
+      transfer.receivedCount++;
+
+      const percent = Math.round((transfer.receivedCount / transfer.meta.totalChunks) * 100);
+      updateFileProgressBar(percent);
+
+      if (transfer.receivedCount === transfer.meta.totalChunks) {
+        assembleCompletedFile(chunkPacket.transferId);
+      }
+    }
+
+    function assembleCompletedFile(transferId) {
+      const transfer = incomingFileTransfers.get(transferId);
+      if (!transfer) return;
+
+      hideFileProgressBar();
+
+      try {
+        const byteArrays = transfer.receivedChunks.map((b64) => {
+          const binaryString = atob(b64);
+          const len = binaryString.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          return bytes;
+        });
+
+        const fullBlob = new Blob(byteArrays, { type: transfer.meta.mime });
+        const fileUrl = URL.createObjectURL(fullBlob);
+
+        appendFileAttachmentToUi({
+          sender: 'remote',
+          name: transfer.meta.name,
+          size: transfer.meta.size,
+          mime: transfer.meta.mime,
+          url: fileUrl,
+          timestamp: Date.now()
+        });
+
+        playSound('received');
+      } catch (err) {
+        showToast('Ошибка сборки файла: ' + err.message, 'error');
+      } finally {
+        incomingFileTransfers.delete(transferId);
+      }
+    }
+
+    function showFileProgressBar(label) {
+      document.getElementById('fileTransferProgressBox').classList.remove('hidden');
+      document.getElementById('fileTransferLabel').innerText = label;
+      updateFileProgressBar(0);
+    }
+
+    function updateFileProgressBar(percent) {
+      document.getElementById('fileTransferPercent').innerText = `${percent}%`;
+      document.getElementById('fileTransferProgressBar').style.width = `${percent}%`;
+    }
+
+    function hideFileProgressBar() {
+      setTimeout(() => {
+        document.getElementById('fileTransferProgressBox').classList.add('hidden');
+        updateFileProgressBar(0);
+      }, 500);
+    }
+
+    function appendFileAttachmentToUi({ sender, name, size, mime, url, timestamp }) {
+      document.getElementById('emptyState').classList.add('hidden');
+      const container = document.getElementById('messagesContainer');
+      const timeStr = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const sizeStr = formatFileSize(size);
+
+      const msgWrapper = document.createElement('div');
+      msgWrapper.className = sender === 'me' ? 'flex justify-end' : 'flex justify-start';
+
+      const isImage = mime && mime.startsWith('image/');
+
+      const bubbleColor = sender === 'me'
+        ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-2xl rounded-br-sm'
+        : 'bg-slate-800 border border-slate-700/80 text-slate-100 rounded-2xl rounded-bl-sm';
+
+      msgWrapper.innerHTML = `
+        <div class="max-w-[85%] sm:max-w-md ${bubbleColor} p-3 shadow-md space-y-2">
+          ${isImage ? `
+            <div class="rounded-lg overflow-hidden max-h-60 bg-black/20">
+              <img src="${url}" alt="${escapeHtml(name)}" class="w-full h-auto object-cover cursor-pointer hover:opacity-95 transition" onclick="window.open('${url}')" />
+            </div>
+          ` : ''}
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-black/20 flex items-center justify-center flex-none">
+              <i data-lucide="${isImage ? 'image' : 'file-text'}" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-semibold truncate">${escapeHtml(name)}</p>
+              <p class="text-[10px] opacity-75">${sizeStr}</p>
+            </div>
+            <a href="${url}" download="${escapeHtml(name)}" class="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition flex-none" title="Скачать файл">
+              <i data-lucide="download" class="w-4 h-4"></i>
+            </a>
+          </div>
+          <div class="flex items-center ${sender === 'me' ? 'justify-end' : 'justify-start'} text-[10px] opacity-75">
+            <span>${timeStr}</span>
+          </div>
+        </div>
+      `;
+
+      container.appendChild(msgWrapper);
+      lucide.createIcons();
+      scrollChatToBottom();
+      saveChatHistory();
+    }
+
+    function formatFileSize(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    // ==========================================
+    // Запись и передача голосовых сообщений
+    // ==========================================
+    async function toggleVoiceRecording() {
+      if (isRecordingVoice) {
+        stopVoiceRecording();
+      } else {
+        startVoiceRecording();
+      }
+    }
+
+    async function startVoiceRecording() {
+      if (!isConnected || !dataChannel || dataChannel.readyState !== 'open') {
+        showToast('Нет активного P2P соединения для голосовых сообщений!', 'warning');
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        voiceAudioChunks = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) voiceAudioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach((t) => t.stop());
+          const audioBlob = new Blob(voiceAudioChunks, { type: 'audio/webm' });
+          const base64Audio = await readBlobAsBase64(audioBlob);
+          const audioDataUrl = `data:audio/webm;base64,${base64Audio}`;
+
+          // Отправляем собеседнику
+          dataChannel.send(JSON.stringify({
+            type: 'voice',
+            audioDataUrl: audioDataUrl,
+            timestamp: Date.now()
+          }));
+
+          // Отображаем у себя
+          appendVoiceMessageToUi({
+            sender: 'me',
+            audioDataUrl: audioDataUrl,
+            timestamp: Date.now()
+          });
+
+          playSound('sent');
+        };
+
+        mediaRecorder.start();
+        isRecordingVoice = true;
+
+        const btn = document.getElementById('voiceBtn');
+        btn.classList.add('bg-rose-600', 'text-white', 'animate-pulse');
+        btn.classList.remove('bg-slate-800', 'text-slate-300');
+        showToast('Идет запись голоса... Нажмите еще раз для отправки', 'info');
+      } catch (err) {
+        showToast('Не удалось получить доступ к микрофону: ' + err.message, 'error');
+      }
+    }
+
+    function stopVoiceRecording() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      isRecordingVoice = false;
+      const btn = document.getElementById('voiceBtn');
+      btn.classList.remove('bg-rose-600', 'text-white', 'animate-pulse');
+      btn.classList.add('bg-slate-800', 'text-slate-300');
+    }
+
+    function appendVoiceMessageToUi({ sender, audioDataUrl, timestamp }) {
+      document.getElementById('emptyState').classList.add('hidden');
+      const container = document.getElementById('messagesContainer');
+      const timeStr = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      const msgWrapper = document.createElement('div');
+      msgWrapper.className = sender === 'me' ? 'flex justify-end' : 'flex justify-start';
+
+      const bubbleColor = sender === 'me'
+        ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-2xl rounded-br-sm'
+        : 'bg-slate-800 border border-slate-700/80 text-slate-100 rounded-2xl rounded-bl-sm';
+
+      msgWrapper.innerHTML = `
+        <div class="max-w-[85%] sm:max-w-md ${bubbleColor} p-3 shadow-md space-y-2">
+          <div class="flex items-center gap-2 text-xs font-medium">
+            <i data-lucide="mic" class="w-4 h-4"></i>
+            <span>Голосовое сообщение</span>
+          </div>
+          <audio controls src="${audioDataUrl}" class="w-full h-8 rounded max-w-xs"></audio>
+          <div class="flex items-center ${sender === 'me' ? 'justify-end' : 'justify-start'} text-[10px] opacity-75">
+            <span>${timeStr}</span>
+          </div>
+        </div>
+      `;
+
+      container.appendChild(msgWrapper);
+      lucide.createIcons();
+      scrollChatToBottom();
+      saveChatHistory();
+    }
+
+    // ==========================================
+    // QR-коды и буфер обмена
+    // ==========================================
+    function showQrModal(type) {
+      const textToEncode = type === 'offer' ? currentOfferToken : currentAnswerToken;
+      if (!textToEncode) return;
+
+      const modal = document.getElementById('qrModal');
+      const title = document.getElementById('qrModalTitle');
+      const container = document.getElementById('qrCanvasContainer');
+
+      title.innerText = type === 'offer' ? 'QR-код создателя (Хост)' : 'QR-код ответа (Гость)';
+      container.innerHTML = '';
+
+      new QRCode(container, {
+        text: textToEncode,
+        width: 210,
+        height: 210,
+        colorDark: '#0f172a',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeQrModal() {
+      document.getElementById('qrModal').classList.add('hidden');
+    }
+
+    function copyToClipboard(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(() => fallbackCopyText(text));
+      } else {
+        fallbackCopyText(text);
+      }
+    }
+
+    function fallbackCopyText(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+      } catch (e) {
+        console.warn('Copy failed:', e);
+      }
+      document.body.removeChild(ta);
+    }
+
+    // ==========================================
+    // Сохранение и восстановление истории
+    // ==========================================
+    function saveChatHistory() {
+      try {
+        const container = document.getElementById('messagesContainer');
+        localStorage.setItem('peerlink_chat_cache', container.innerHTML);
+      } catch(e) {}
+    }
+
+    function loadChatHistory() {
+      try {
+        const cached = localStorage.getItem('peerlink_chat_cache');
+        if (cached && cached.trim().length > 0) {
+          document.getElementById('emptyState').classList.add('hidden');
+          document.getElementById('messagesContainer').innerHTML = cached;
+          lucide.createIcons();
+          scrollChatToBottom();
+        }
+      } catch(e) {}
+    }
+
+    // ==========================================
+    // Инициализация при старте
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      loadChatHistory();
+
+      // Проверяем протокол file://
+      if (window.location.protocol === 'file:') {
+        document.getElementById('fileProtocolNotice').classList.remove('hidden');
+      }
+
+      // Разблокировка Tone.js по первому клику
+      document.body.addEventListener('click', () => {
+        if (window.Tone && Tone.context.state !== 'running') {
+          Tone.context.resume();
+        }
+      }, { once: true });
+    });
+  </script>
+</body>
+</html>
